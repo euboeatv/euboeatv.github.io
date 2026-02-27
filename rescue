@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chalkida Rescue - Field Edition</title>
+    
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.css" />
+
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap');
+
+        :root {
+            --c1: #FFCE1F; --c2: #BFFF1F; --c3: #50FF1F;
+            --glass-bg: rgba(255, 255, 255, 0.4);
+            --glass-border: rgba(255, 255, 255, 0.6);
+            --shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.15);
+            --gradient-main: linear-gradient(135deg, var(--c1) 0%, var(--c2) 100%);
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Inter', sans-serif; }
+        body, html { height: 100%; width: 100%; overflow: hidden; background: #e0e5ec; }
+
+        .glass { background: var(--glass-bg); backdrop-filter: blur(12px); border: 1px solid var(--glass-border); border-radius: 16px; box-shadow: var(--shadow); }
+
+        header { position: absolute; top: 15px; left: 50%; transform: translateX(-50%); width: 95%; padding: 12px 20px; display: flex; justify-content: space-between; align-items: center; z-index: 1001; }
+        .logo h1 { font-size: 1.2rem; font-weight: 800; background: var(--gradient-main); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+
+        .controls { display: flex; gap: 8px; }
+        button, .btn-label { background: var(--glass-bg); border: 1px solid var(--glass-border); padding: 8px 12px; font-weight: 600; font-size: 0.8rem; border-radius: 8px; cursor: pointer; transition: 0.3s; }
+        button:hover, .btn-label:hover { background: var(--gradient-main); transform: translateY(-2px); }
+
+        #map { height: 100vh; width: 100vw; z-index: 1; }
+
+        /* Status & GeoJSON Panel */
+        .side-panel { position: absolute; bottom: 20px; right: 20px; width: 280px; z-index: 1000; padding: 15px; transition: 0.3s; cursor: pointer; max-height: 60px; overflow: hidden; }
+        .side-panel:hover { max-height: 400px; width: 350px; }
+        #geojson-code { font-size: 0.7rem; white-space: pre-wrap; margin-top: 10px; opacity: 0; transition: 0.3s; overflow-y: auto; max-height: 300px; }
+        .side-panel:hover #geojson-code { opacity: 1; }
+
+        /* GPS Button */
+        #gps-btn { background: white; color: #333; border: 2px solid var(--c1); font-size: 1.2rem; }
+        #gps-btn.active { background: var(--c3); animation: pulse 2s infinite; }
+
+        @keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(80, 255, 31, 0.7); } 70% { box-shadow: 0 0 0 10px rgba(80, 255, 31, 0); } 100% { box-shadow: 0 0 0 0 rgba(80, 255, 31, 0); } }
+
+        .popup-img { width: 100%; border-radius: 8px; margin-top: 5px; }
+    </style>
+</head>
+<body>
+
+    <header class="glass">
+        <div class="logo"><h1>CHALKIDA RESCUE</h1></div>
+        <div class="controls">
+            <button id="gps-btn" onclick="toggleGPS()" title="Follow My Location">📡</button>
+            <button onclick="addStickyNote()">📌 Note + Photo</button>
+            <button onclick="exportGeoJSON()" style="background: var(--c3)">💾 Export</button>
+            <label for="import-geojson" class="btn-label">📂 Load</label>
+            <input type="file" id="import-geojson" accept=".geojson,application/json" style="display: none;">
+        </div>
+    </header>
+
+    <div id="map"></div>
+
+    <div class="side-panel glass">
+        <h4 id="status-text">📡 System Ready</h4>
+        <pre id="geojson-code">// Live Data View...</pre>
+    </div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.js"></script>
+
+    <script>
+        const map = L.map('map', { zoomControl: false }).setView([38.4636, 23.5955], 14);
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png').addTo(map);
+
+        const drawnItems = new L.FeatureGroup().addTo(map);
+        const breadcrumbTrail = L.polyline([], {color: '#50FF1F', dashArray: '5, 10'}).addTo(map);
+        let userMarker = null;
+        let isTracking = false;
+
+        // --- GPS Logic ---
+        function toggleGPS() {
+            isTracking = !isTracking;
+            const btn = document.getElementById('gps-btn');
+            if (isTracking) {
+                btn.classList.add('active');
+                map.locate({ watch: true, enableHighAccuracy: true });
+            } else {
+                btn.classList.remove('active');
+                map.stopLocate();
+            }
+        }
+
+        map.on('locationfound', (e) => {
+            if (!userMarker) {
+                userMarker = L.circleMarker(e.latlng, { radius: 8, color: '#fff', fillColor: '#3388ff', fillOpacity: 1, weight: 3 }).addTo(map);
+            }
+            userMarker.setLatLng(e.latlng);
+            breadcrumbTrail.addLatLng(e.latlng); // Breadcrumbs!
+            if (isTracking) map.panTo(e.latlng);
+            document.getElementById('status-text').innerText = `📡 GPS Active (${e.accuracy.toFixed(1)}m)`;
+        });
+
+        // --- Sticky Note with Image ---
+        function addStickyNote() {
+            alert("1. Click map to place note\n2. Enter text\n3. Select optional photo");
+            map.once('click', async function(e) {
+                const text = prompt("Note content:");
+                if (!text) return;
+
+                const input = document.createElement('input');
+                input.type = 'file';
+                input.accept = 'image/*';
+                input.onchange = async (event) => {
+                    const file = event.target.files[0];
+                    let base64 = "";
+                    if (file) {
+                        base64 = await toBase64(file);
+                    }
+                    createNoteLayer(e.latlng, text, base64);
+                };
+                input.click();
+            });
+        }
+
+        const toBase64 = file => new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.readAsDataURL(file);
+            reader.onload = () => resolve(reader.result);
+            reader.onerror = error => reject(error);
+        });
+
+        function createNoteLayer(latlng, text, imgData) {
+            const marker = L.marker(latlng);
+            let content = `<b>Note:</b><br>${text}`;
+            if (imgData) content += `<br><img src="${imgData}" class="popup-img">`;
+            
+            marker.bindPopup(content).addTo(drawnItems);
+            marker.feature = {
+                type: "Feature",
+                properties: { note: text, image: imgData, type: "sticky" },
+                geometry: { type: "Point", coordinates: [latlng.lng, latlng.lat] }
+            };
+            updateLiveGeoJSON();
+        }
+
+        // --- Core Functions ---
+        function updateLiveGeoJSON() {
+            const data = drawnItems.toGeoJSON();
+            document.getElementById('geojson-code').textContent = JSON.stringify(data, null, 2);
+        }
+
+        map.on(L.Draw.Event.CREATED, (e) => {
+            drawnItems.addLayer(e.layer);
+            updateLiveGeoJSON();
+        });
+
+        function exportGeoJSON() {
+            const data = drawnItems.toGeoJSON();
+            const blob = new Blob([JSON.stringify(data)], {type: "application/json"});
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(blob);
+            a.download = `Chalkida_Rescue_${Date.now()}.geojson`;
+            a.click();
+        }
+
+        // --- Service Worker Registration (For Offline) ---
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('sw.js').catch(err => console.log('SW failed', err));
+            });
+        }
+    </script>
+</body>
+</html>
