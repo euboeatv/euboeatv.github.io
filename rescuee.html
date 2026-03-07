@@ -1,0 +1,1033 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Chalkida Rescue · Tactical Map</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.css"/>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Barlow+Condensed:wght@400;600;800&display=swap');
+:root{
+  --primary:#FFCE1F;--secondary:#50FF1F;--danger:#ff6b6b;--sos:#ff2244;
+  --panel-bg:rgba(14,18,28,0.92);--panel-border:rgba(255,206,31,0.22);
+  --shadow:0 8px 32px rgba(0,0,0,0.55);
+  --text-bright:#eef2ff;--text-muted:#7a8fb0;
+  --mono:'Share Tech Mono',monospace;--sans:'Barlow Condensed',sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+html,body{width:100%;height:100%;overflow:hidden;background:#0e1220;font-family:var(--sans);}
+
+#map{position:absolute;top:0;left:0;z-index:1;}
+
+.panel{
+  background:var(--panel-bg);
+  backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);
+  border:1px solid var(--panel-border);
+  border-radius:12px;box-shadow:var(--shadow);
+}
+.cursor-crosshair{cursor:crosshair!important;}
+.leaflet-draw{display:none!important;}
+
+/* ── LEFT TOOLBAR ── */
+.nav-container{position:fixed;top:18px;left:18px;z-index:1001;display:flex;align-items:flex-start;gap:12px;}
+
+.menv-btn-wrap{display:flex;flex-direction:column;align-items:center;gap:6px;}
+.menv-btn{
+  background:var(--primary);color:#111;border:none;border-radius:10px;
+  padding:11px 15px;font-family:var(--sans);font-size:1.2rem;font-weight:800;
+  cursor:pointer;box-shadow:var(--shadow);
+  transform:rotate(-90deg);
+  transition:transform 0.35s cubic-bezier(.68,-.55,.27,1.55),background 0.2s;
+  white-space:nowrap;position:relative;
+}
+.menv-btn.open{transform:rotate(0deg);background:var(--secondary);}
+.marker-badge{
+  position:absolute;top:-7px;right:-7px;
+  background:var(--danger);color:#fff;
+  border-radius:50%;width:20px;height:20px;
+  font-size:0.65rem;font-family:var(--mono);
+  display:flex;align-items:center;justify-content:center;
+  transform:rotate(90deg);
+  transition:transform 0.35s cubic-bezier(.68,-.55,.27,1.55);
+  box-shadow:0 2px 6px rgba(0,0,0,0.4);
+}
+.menv-btn.open .marker-badge{transform:rotate(0deg);}
+.marker-badge.hidden{display:none;}
+
+.tools-panel{
+  display:flex;flex-direction:column;gap:13px;padding:15px;
+  max-width:290px;max-height:84vh;overflow-y:auto;
+  opacity:0;pointer-events:none;transform:translateX(-18px);
+  transition:opacity 0.28s,transform 0.28s;
+}
+.tools-panel::-webkit-scrollbar{width:3px;}
+.tools-panel::-webkit-scrollbar-thumb{background:var(--panel-border);border-radius:3px;}
+.tools-panel.open{opacity:1;pointer-events:auto;transform:translateX(0);}
+
+.section-title{
+  font-family:var(--mono);font-size:0.68rem;color:var(--primary);
+  text-transform:uppercase;letter-spacing:2px;
+  padding-bottom:5px;border-bottom:1px solid var(--panel-border);
+}
+.tool-group{display:flex;flex-wrap:wrap;gap:6px;}
+
+button{
+  font-family:var(--sans);font-size:0.88rem;font-weight:600;
+  background:rgba(255,255,255,0.05);border:1px solid var(--panel-border);
+  color:var(--text-bright);padding:8px 12px;border-radius:8px;
+  cursor:pointer;transition:all 0.16s;flex:1 1 auto;
+}
+button:hover{background:var(--primary);color:#111;border-color:var(--primary);transform:translateY(-1px);box-shadow:0 4px 10px rgba(255,206,31,0.28);}
+button.active-tool{background:rgba(80,255,31,0.18)!important;border-color:var(--secondary)!important;color:var(--secondary)!important;}
+.btn-danger{background:rgba(255,107,107,0.15);border-color:rgba(255,107,107,0.35);color:#ffaaaa;}
+.btn-danger:hover{background:var(--danger);color:#fff;border-color:var(--danger);}
+.btn-success{background:rgba(80,255,31,0.1);border-color:rgba(80,255,31,0.28);color:var(--secondary);}
+.btn-success:hover{background:var(--secondary);color:#111;border-color:var(--secondary);}
+.btn-share{background:rgba(155,89,182,0.18);border-color:rgba(155,89,182,0.38);color:#d7aefb;width:100%;}
+.btn-share:hover{background:#9b59b6;color:#fff;}
+.btn-sos{
+  background:rgba(255,34,68,0.18)!important;border-color:rgba(255,34,68,0.5)!important;
+  color:#ff6688!important;width:100%;font-size:1rem!important;letter-spacing:1px;
+}
+.btn-sos:hover{background:var(--sos)!important;color:#fff!important;border-color:var(--sos)!important;}
+
+/* cancel draw bar */
+#cancel-bar{
+  position:fixed;bottom:80px;left:50%;transform:translateX(-50%);
+  z-index:1010;padding:9px 20px;display:flex;align-items:center;gap:12px;
+  opacity:0;pointer-events:none;transition:opacity 0.22s,transform 0.22s;
+  transform:translateX(-50%) translateY(10px);
+}
+#cancel-bar.visible{opacity:1;pointer-events:auto;transform:translateX(-50%) translateY(0);}
+#cancel-bar span{font-family:var(--mono);font-size:0.78rem;color:var(--primary);}
+#cancel-bar button{flex:0 0 auto;background:var(--danger);border-color:var(--danger);color:#fff;padding:6px 14px;}
+#cancel-bar button:hover{background:#ff8888;transform:none;}
+
+/* upload progress */
+#upload-bar{
+  position:fixed;top:0;left:0;height:3px;background:var(--primary);
+  width:0%;z-index:2100;transition:width 0.3s,opacity 0.4s;opacity:0;
+}
+
+/* ── TOP RIGHT ── */
+.top-right-panel{position:fixed;top:18px;right:18px;z-index:1001;display:flex;flex-direction:column;align-items:flex-end;gap:10px;}
+.op-badge{padding:9px 15px;font-family:var(--mono);font-size:0.78rem;color:var(--primary);border-right:3px solid var(--primary);}
+.callsign-box{display:flex;gap:7px;padding:11px;transition:opacity 0.28s,transform 0.28s;}
+.callsign-box.hidden{opacity:0;pointer-events:none;transform:translateY(-8px);position:absolute;}
+.callsign-input{
+  padding:7px 11px;border-radius:7px;border:1px solid var(--panel-border);
+  outline:none;background:rgba(255,255,255,0.06);
+  color:var(--text-bright);font-family:var(--mono);font-size:0.82rem;width:185px;
+}
+.callsign-input::placeholder{color:var(--text-muted);}
+.callsign-input:focus{border-color:var(--primary);box-shadow:0 0 0 2px rgba(255,206,31,0.18);}
+
+/* Auth status & modal */
+#auth-box{display:flex;gap:8px;align-items:center;padding:11px;}
+#auth-status{font-family:var(--mono);color:var(--text-muted);}
+#auth-modal{
+  backdrop-filter:blur(18px);
+  border:1px solid var(--primary);
+  box-shadow:var(--shadow);
+  z-index:2100;
+}
+#auth-modal input{width:100%;}
+
+/* ── GEOCODE SEARCH ── */
+#geocode-box{position:fixed;top:18px;left:50%;transform:translateX(-50%);z-index:1001;display:flex;gap:0;}
+#geocode-input{
+  padding:9px 14px;border-radius:9px 0 0 9px;
+  border:1px solid var(--panel-border);border-right:none;
+  background:rgba(14,18,28,0.88);backdrop-filter:blur(14px);
+  color:var(--text-bright);font-family:var(--mono);font-size:0.82rem;width:230px;outline:none;
+}
+#geocode-input::placeholder{color:var(--text-muted);}
+#geocode-input:focus{border-color:var(--primary);}
+#geocode-btn{
+  border-radius:0 9px 9px 0;padding:9px 13px;flex:0 0 auto;
+  background:rgba(255,206,31,0.12);border:1px solid var(--panel-border);border-left:none;
+  color:var(--primary);font-size:1rem;
+}
+#geocode-btn:hover{background:var(--primary);color:#111;transform:none;}
+#geocode-results{
+  position:absolute;top:100%;left:0;right:0;margin-top:4px;
+  background:var(--panel-bg);border:1px solid var(--panel-border);
+  border-radius:8px;overflow:hidden;display:none;
+}
+#geocode-results div{
+  padding:8px 12px;font-family:var(--mono);font-size:0.75rem;color:var(--text-bright);
+  cursor:pointer;border-bottom:1px solid var(--panel-border);transition:background 0.12s;
+}
+#geocode-results div:last-child{border-bottom:none;}
+#geocode-results div:hover{background:rgba(255,206,31,0.12);}
+
+/* ── WEATHER BOX ── */
+.weather-box{position:fixed;bottom:26px;left:26px;z-index:1001;padding:15px 18px;min-width:210px;}
+.weather-label{font-family:var(--mono);font-size:0.62rem;color:var(--text-muted);letter-spacing:2px;text-transform:uppercase;margin-bottom:3px;}
+.weather-temp{font-family:var(--sans);font-size:2.6rem;font-weight:800;color:var(--primary);line-height:1;}
+.weather-desc{font-family:var(--sans);font-weight:600;font-size:0.95rem;color:var(--text-bright);margin-top:2px;}
+.layer-divider{border:none;border-top:1px solid var(--panel-border);margin:10px 0;}
+.layer-toggle-group{display:flex;gap:6px;margin-top:2px;}
+.layer-btn{
+  font-family:var(--mono);font-size:0.68rem;padding:5px 9px;border-radius:6px;
+  background:rgba(255,255,255,0.05);border:1px solid var(--panel-border);
+  color:var(--text-muted);cursor:pointer;transition:all 0.16s;flex:1;text-align:center;
+}
+.layer-btn.active{background:rgba(255,206,31,0.15);border-color:var(--primary);color:var(--primary);}
+.layer-btn:hover:not(.active){background:rgba(255,255,255,0.1);color:var(--text-bright);}
+
+/* ── CURSOR COORDS ── */
+#coords-bar{
+  position:fixed;bottom:26px;right:18px;z-index:1001;
+  padding:9px 14px;font-family:var(--mono);font-size:0.72rem;color:var(--text-muted);
+}
+#coords-bar span{color:var(--primary);}
+
+/* ── MEASURE PANEL ── */
+#measure-result{
+  position:fixed;bottom:90px;right:18px;z-index:1001;
+  padding:10px 14px;font-family:var(--mono);font-size:0.78rem;color:var(--text-bright);
+  display:none;
+}
+#measure-result b{color:var(--primary);}
+
+/* ── TOAST ── */
+#toast{
+  position:fixed;bottom:72px;right:18px;z-index:2000;
+  padding:9px 16px;font-family:var(--mono);font-size:0.78rem;color:var(--primary);
+  opacity:0;transition:opacity 0.28s;pointer-events:none;
+}
+#toast.on{opacity:1;}
+
+/* ── LEAFLET POPUPS ── */
+.leaflet-popup-content-wrapper{
+  background:var(--panel-bg)!important;border:1px solid var(--panel-border)!important;
+  border-radius:10px!important;box-shadow:var(--shadow)!important;
+  color:var(--text-bright)!important;font-family:var(--sans)!important;
+  backdrop-filter:blur(14px)!important;
+}
+.leaflet-popup-tip{background:var(--panel-bg)!important;}
+.leaflet-popup-content{font-size:0.93rem;}
+.icon-wrap{
+  width:40px;height:40px;display:flex;align-items:center;justify-content:center;
+  background:none!important;border:none!important;
+  font-size:28px;filter:drop-shadow(0 3px 5px rgba(0,0,0,0.65));
+}
+.sos-icon-wrap{
+  width:48px;height:48px;font-size:32px;
+  display:flex;align-items:center;justify-content:center;
+  background:none!important;border:none!important;
+  filter:drop-shadow(0 0 8px rgba(255,34,68,0.8));
+}
+@keyframes pulse-sos{0%,100%{filter:drop-shadow(0 0 6px rgba(255,34,68,0.9));}50%{filter:drop-shadow(0 0 18px rgba(255,34,68,1));}}
+.sos-icon-wrap span{animation:pulse-sos 1.2s ease-in-out infinite;}
+.pop-btn{
+  display:block;margin-top:9px;width:100%;padding:5px 0;
+  background:rgba(255,107,107,0.18)!important;color:#ffaaaa!important;
+  border:1px solid rgba(255,107,107,0.32)!important;border-radius:6px;
+  font-family:var(--sans)!important;font-size:0.78rem!important;font-weight:600;
+  cursor:pointer;transition:all 0.15s;
+}
+.pop-btn:hover{background:var(--danger)!important;color:#fff!important;}
+.pop-meta{font-family:var(--mono);font-size:0.65rem;color:var(--text-muted);margin-top:6px;border-top:1px solid var(--panel-border);padding-top:5px;}
+.media-thumb{max-width:230px;border-radius:7px;margin-top:7px;}
+
+/* ── EXPORT BTN ── */
+.btn-export{background:rgba(0,210,255,0.08);border-color:rgba(0,210,255,0.28);color:#7ee8ff;width:100%;}
+.btn-export:hover{background:rgba(0,210,255,0.25);border-color:#00d2ff;color:#00d2ff;transform:none;}
+
+@keyframes shake{0%,100%{transform:translateX(0);}25%{transform:translateX(-5px);}75%{transform:translateX(5px);}}
+.shake{animation:shake 0.38s;}
+</style>
+</head>
+<body>
+
+<!-- Upload progress bar -->
+<div id="upload-bar"></div>
+
+<!-- LEFT TOOLBAR -->
+<div class="nav-container">
+  <div class="menv-btn-wrap">
+    <button id="menv-toggle" class="menv-btn" onclick="toggleMenv()">
+      MENV
+      <span id="marker-badge" class="marker-badge hidden">0</span>
+    </button>
+  </div>
+  <div id="tools-panel" class="tools-panel panel">
+    <div class="tool-group">
+      <button class="btn-share" onclick="copyLink()">🔗 Copy Team Link</button>
+    </div>
+
+    <!-- SOS -->
+    <div class="tool-group">
+      <button class="btn-sos" onclick="dropSOS()">🆘 MAYDAY / SOS</button>
+    </div>
+
+    <div style="display:flex;flex-direction:column;gap:9px;">
+      <div class="section-title">Drop Markers</div>
+      <div class="tool-group">
+        <button onclick="dropMarker('victim','🆘')">🆘 Subject</button>
+        <button onclick="dropMarker('hazard','⚠️')">⚠️ Hazard</button>
+        <button onclick="dropMarker('animal','🐾')">🐾 Animal</button>
+        <button onclick="dropMarker('note','📝')">📝 Note</button>
+      </div>
+    </div>
+
+    <div style="display:flex;flex-direction:column;gap:9px;">
+      <div class="section-title">Attach Media</div>
+      <div class="tool-group">
+        <button onclick="dropMedia()" style="background:rgba(0,210,255,0.08);border-color:rgba(0,210,255,0.28);color:#7ee8ff;">📸 / 🎥 Photo & Video</button>
+      </div>
+    </div>
+
+    <div style="display:flex;flex-direction:column;gap:9px;">
+      <div class="section-title">Tactical Drawing</div>
+      <div class="tool-group">
+        <button id="btn-draw-search" onclick="draw('search')">🟥 Search Zone</button>
+        <button id="btn-draw-clear"  onclick="draw('clear')">🟩 Cleared</button>
+        <button id="btn-draw-route"  onclick="draw('route')">〰 Route</button>
+      </div>
+    </div>
+
+    <div style="display:flex;flex-direction:column;gap:9px;">
+      <div class="section-title">Measure</div>
+      <div class="tool-group">
+        <button id="btn-measure" onclick="toggleMeasure()">📐 Bearing & Distance</button>
+      </div>
+    </div>
+
+    <div class="tool-group">
+      <button onclick="gps()" style="background:rgba(0,210,255,0.08);border-color:rgba(0,210,255,0.28);color:#7ee8ff;">📍 GPS</button>
+      <button onclick="undoLast()">↩ Undo</button>
+      <button class="btn-danger" onclick="clearMap()">🗑 Clear</button>
+    </div>
+
+    <div style="display:flex;flex-direction:column;gap:9px;">
+      <div class="section-title">Cloud Sync</div>
+      <div class="tool-group">
+        <button class="btn-success" onclick="pushCloud()">☁️ Push</button>
+        <button onclick="pullCloud()">📥 Pull</button>
+      </div>
+    </div>
+
+    <div style="display:flex;flex-direction:column;gap:9px;">
+      <div class="section-title">Export</div>
+      <div class="tool-group">
+        <button class="btn-export" onclick="exportGeoJSON()">⬇ Download GeoJSON</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- GEOCODE SEARCH (top center) -->
+<div id="geocode-box" style="position:fixed;top:18px;left:50%;transform:translateX(-50%);z-index:1001;">
+  <div style="position:relative;display:flex;">
+    <input id="geocode-input" class="panel" placeholder="Search location…" autocomplete="off" onkeydown="if(event.key==='Enter')geocode()"/>
+    <button id="geocode-btn" class="panel" onclick="geocode()">🔍</button>
+    <div id="geocode-results"></div>
+  </div>
+</div>
+
+<!-- TOP RIGHT -->
+<div class="top-right-panel">
+  <div id="op-badge" class="op-badge panel">📡 OP: ------</div>
+  <!-- Auth status / login button -->
+  <div id="auth-box" class="panel" style="padding:11px; display:flex; gap:8px; align-items:center;">
+    <span id="auth-status" style="font-family:var(--mono); color:var(--text-muted);">Not logged in</span>
+    <button id="auth-btn" onclick="showAuthModal()" style="background:var(--primary); color:#111; border:none;">Login</button>
+  </div>
+  <!-- Callsign box (hidden when not needed) -->
+  <div id="cs-box" class="callsign-box panel">
+    <input id="cs-input" class="callsign-input" placeholder="Callsign (min 6 chars)" autocomplete="off"/>
+    <button onclick="saveCS()" style="background:var(--primary);color:#111;border:none;flex:0 0 auto;">SAVE</button>
+  </div>
+</div>
+
+<!-- Auth Modal (hidden by default) -->
+<div id="auth-modal" class="panel" style="position:fixed; top:50%; left:50%; transform:translate(-50%,-50%); z-index:2000; width:300px; padding:24px; display:none; flex-direction:column; gap:16px;">
+  <div style="display:flex; justify-content:space-between; align-items:center;">
+    <span style="font-family:var(--mono); color:var(--primary);">🔐 OPERATOR LOGIN</span>
+    <button onclick="closeAuthModal()" style="background:none; border:none; color:var(--text-muted); font-size:1.2rem;">✕</button>
+  </div>
+  <input id="auth-username" class="callsign-input" placeholder="Username" autocomplete="off">
+  <input id="auth-password" type="password" class="callsign-input" placeholder="Password (8+ chars, 1 digit, 1 special)" autocomplete="off">
+  <div style="display:flex; gap:8px;">
+    <button onclick="authSignup()" style="flex:1; background:rgba(80,255,31,0.1); border-color:var(--secondary); color:var(--secondary);">Sign Up</button>
+    <button onclick="authLogin()" style="flex:1; background:var(--primary); color:#111;">Log In</button>
+  </div>
+  <div id="auth-message" style="font-family:var(--mono); font-size:0.7rem; color:var(--danger); text-align:center;"></div>
+</div>
+
+<!-- CANCEL DRAW BAR -->
+<div id="cancel-bar" class="panel">
+  <span>✏ Drawing active — click map to add points, double-click to finish</span>
+  <button onclick="cancelDraw()">✕ Cancel</button>
+</div>
+
+<!-- MEASURE RESULT -->
+<div id="measure-result" class="panel"></div>
+
+<!-- WEATHER (bottom left) -->
+<div class="weather-box panel">
+  <div class="weather-label">Chalcis Weather</div>
+  <div id="w-temp" class="weather-temp">--°C</div>
+  <div id="w-desc" class="weather-desc">Loading...</div>
+  <hr class="layer-divider"/>
+  <div class="weather-label">Map Layer</div>
+  <div class="layer-toggle-group">
+    <div class="layer-btn active" id="btn-osm"  onclick="setLayer('osm')">🗺 OSM</div>
+    <div class="layer-btn"       id="btn-sat"  onclick="setLayer('sat')">🛰 SAT</div>
+    <div class="layer-btn"       id="btn-topo" onclick="setLayer('topo')">⛰ TOPO</div>
+  </div>
+</div>
+
+<!-- COORDS (bottom right) -->
+<div id="coords-bar" class="panel">
+  <span id="lat-val">--</span>° N &nbsp; <span id="lng-val">--</span>° E
+</div>
+
+<!-- TOAST -->
+<div id="toast" class="panel"></div>
+
+<div id="map"></div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+// ── Config ───────────────────────────────────────────────────────
+const SB_URL = 'https://aolvszknvjunuicwkbdt.supabase.co';
+const SB_KEY = 'sb_publishable_MqaBuDbJ4od8Wo4bm0r3VA_k6D4gWzT';
+
+// ── State ────────────────────────────────────────────────────────
+var sb, MAP, drawn, handlers;
+var user      = null;               // callsign (display name)
+var currentUser = null;              // Supabase auth user
+var secret    = '';
+var authed    = false;               // legacy, not used now
+var toastTmr  = null;
+var curLayer  = 'osm';
+var activeDrawTool = null;
+var measureMode    = false;
+var measurePoints  = [];
+var measureMarkers = [];
+var measureLine    = null;
+var resizeTmr      = null;
+
+// ── Tiles ────────────────────────────────────────────────────────
+var TILES = {
+  osm:  'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+  sat:  'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+  topo: 'https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png'
+};
+var ATTRS = {
+  osm:  '© OpenStreetMap contributors',
+  sat:  '© Esri, DigitalGlobe',
+  topo: '© OpenTopoMap'
+};
+
+// ── Boot ─────────────────────────────────────────────────────────
+window.addEventListener('load', function() {
+  try { sb = window.supabase.createClient(SB_URL, SB_KEY); } catch(e){ console.warn('SB:', e); }
+
+  user   = localStorage.getItem('rescu_user') || null;
+  secret = new URLSearchParams(location.search).get('team') || '';
+  if (!secret) {
+    var a = new Uint8Array(16); crypto.getRandomValues(a);
+    secret = Array.from(a, function(b){ return b.toString(16).padStart(2,'0'); }).join('');
+    history.replaceState({}, '', '?team=' + secret);
+  }
+
+  paintBadge();
+  fetchWeather();
+  restoreSession(); // check for existing Supabase session
+
+  // Auto-focus callsign if not set
+  if (!user || user.length < 6) {
+    setTimeout(function(){ document.getElementById('cs-input').focus(); }, 400);
+  }
+
+  // Size map
+  sizeMap();
+
+  // Init Leaflet
+  MAP = L.map('map', { zoomControl:false, center:[38.4636,23.5955], zoom:14 });
+  L.control.zoom({ position:'bottomright' }).addTo(MAP);
+  L.tileLayer(TILES.osm, { maxZoom:19, attribution:ATTRS.osm }).addTo(MAP);
+
+  drawn = new L.FeatureGroup();
+  MAP.addLayer(drawn);
+
+  handlers = {
+    search: new L.Draw.Polygon(MAP,  { shapeOptions:{ color:'#ff6b6b', fillColor:'#ff6b6b', fillOpacity:0.18, weight:2.5 }}),
+    clear:  new L.Draw.Polygon(MAP,  { shapeOptions:{ color:'#50FF1F', fillColor:'#50FF1F', fillOpacity:0.18, weight:2.5 }}),
+    route:  new L.Draw.Polyline(MAP, { shapeOptions:{ color:'#FFCE1F', weight:4, dashArray:'8,12' }})
+  };
+
+  MAP.on(L.Draw.Event.CREATED, function(e) {
+    var layer  = e.layer;
+    var desc   = prompt('Label this area/route:', 'Unlabeled');
+    var author = user || 'Anonymous';
+    var ts     = new Date().toLocaleTimeString();
+    layer.feature = { type:'Feature', properties:{ name:desc||'Unlabeled', createdBy:author, time:ts }};
+    if (desc !== null) layer.bindPopup(mkPop('<b>'+escHtml(desc||'Unlabeled')+'</b>', null, author, ts, L.stamp(layer)));
+    drawn.addLayer(layer);
+    clearActiveDrawBtn();
+    hideCancelBar();
+    updateBadge();
+  });
+
+  MAP.on(L.Draw.Event.DRAWSTART, function(){ showCancelBar(); });
+  MAP.on(L.Draw.Event.DRAWSTOP,  function(){ hideCancelBar(); clearActiveDrawBtn(); });
+
+  MAP.on('locationfound', function(e) {
+    L.circleMarker(e.latlng, { radius:9, color:'#00d2ff', fillColor:'#00d2ff', fillOpacity:0.82 })
+      .addTo(MAP)
+      .bindPopup('<b>'+(user||'You')+'</b><div class="pop-meta">GPS fix · '+new Date().toLocaleTimeString()+'</div>')
+      .openPopup();
+    updateBadge();
+  });
+
+  // Cursor coords
+  MAP.on('mousemove', function(e){
+    document.getElementById('lat-val').textContent = e.latlng.lat.toFixed(5);
+    document.getElementById('lng-val').textContent = e.latlng.lng.toFixed(5);
+  });
+
+  // Measure click handler
+  MAP.on('click', function(e){ if (measureMode) handleMeasureClick(e); });
+
+  // Resize (debounced)
+  window.addEventListener('resize', function() {
+    clearTimeout(resizeTmr);
+    resizeTmr = setTimeout(function(){ sizeMap(); MAP.invalidateSize(); }, 80);
+  });
+
+  // Dark filter on OSM
+  setTimeout(function(){
+    if (MAP) MAP.getContainer().style.filter = 'brightness(0.88) hue-rotate(180deg) invert(1) contrast(0.9) saturate(0.7)';
+  }, 200);
+});
+
+function sizeMap() {
+  var el = document.getElementById('map');
+  el.style.width  = window.innerWidth  + 'px';
+  el.style.height = window.innerHeight + 'px';
+}
+
+// ── Layer switcher ───────────────────────────────────────────────
+function setLayer(name) {
+  if (!MAP || name === curLayer) return;
+  MAP.eachLayer(function(l){ if (l instanceof L.TileLayer) MAP.removeLayer(l); });
+  L.tileLayer(TILES[name], { maxZoom:19, attribution:ATTRS[name] }).addTo(MAP);
+  MAP.getContainer().style.filter = name === 'osm' ? 'brightness(0.88) hue-rotate(180deg) invert(1) contrast(0.9) saturate(0.7)' : 'none';
+  curLayer = name;
+  ['osm','sat','topo'].forEach(function(k){
+    document.getElementById('btn-'+k).classList.toggle('active', k === name);
+  });
+}
+
+// ── Weather ───────────────────────────────────────────────────────
+function fetchWeather() {
+  fetch('https://api.open-meteo.com/v1/forecast?latitude=38.4636&longitude=23.5955&current_weather=true')
+    .then(function(r){ return r.json(); })
+    .then(function(d) {
+      document.getElementById('w-temp').textContent = Math.round(d.current_weather.temperature) + '°C';
+      var c = d.current_weather.weathercode, s = 'Clear ☀';
+      if ([1,2,3].indexOf(c)>-1) s='Partly Cloudy 🌤';
+      if(c>=45&&c<=48)s='Foggy 🌫'; if(c>=51&&c<=67)s='Rainy 🌧';
+      if(c>=71&&c<=77)s='Snowy ❄'; if(c>=95)s='Thunderstorms ⛈';
+      document.getElementById('w-desc').textContent = s;
+    }).catch(function(){ document.getElementById('w-desc').textContent = 'Unavailable'; });
+}
+
+// ── Toast ─────────────────────────────────────────────────────────
+function toast(msg, ms) {
+  var el = document.getElementById('toast');
+  el.textContent = msg; el.classList.add('on');
+  clearTimeout(toastTmr);
+  toastTmr = setTimeout(function(){ el.classList.remove('on'); }, ms||3000);
+}
+
+// ── Badge ─────────────────────────────────────────────────────────
+function paintBadge() {
+  var badge = document.getElementById('op-badge');
+  var box   = document.getElementById('cs-box');
+  var op    = secret ? secret.slice(0,6).toUpperCase() : '------';
+  if (user && user.length >= 6) {
+    badge.innerHTML = '📡 OP:<b style="color:#fff;margin:0 4px">'+op+'</b> | 👤 '+escHtml(user);
+    box.classList.add('hidden');
+  } else {
+    badge.innerHTML = '📡 OP:<b style="color:#fff;margin:0 4px">'+op+'</b> | <span style="color:#ffaaaa">⚠ SET CALLSIGN</span>';
+    box.classList.remove('hidden');
+  }
+}
+
+function updateBadge() {
+  var count = drawn.getLayers().length;
+  var el    = document.getElementById('marker-badge');
+  if (count > 0) { el.textContent = count; el.classList.remove('hidden'); }
+  else            { el.classList.add('hidden'); }
+}
+
+window.saveCS = function() {
+  var v = document.getElementById('cs-input').value.trim();
+  if (v.length < 6) {
+    var b = document.getElementById('cs-box');
+    b.classList.remove('shake'); void b.offsetWidth; b.classList.add('shake');
+    toast('⚠ Callsign needs 6+ characters'); return;
+  }
+  user = v; localStorage.setItem('rescu_user', v);
+  paintBadge(); toast('✓ Callsign: ' + v);
+};
+
+// Enter key on callsign
+document.addEventListener('DOMContentLoaded', function(){
+  var inp = document.getElementById('cs-input');
+  if (inp) inp.addEventListener('keydown', function(e){ if(e.key==='Enter') saveCS(); });
+});
+
+// ── Auth ─────────────────────────────────────────────────────────
+async function restoreSession() {
+  if (!sb) return;
+  const { data: { session } } = await sb.auth.getSession();
+  if (session) {
+    currentUser = session.user;
+    updateAuthUI();
+    toast('🔐 Session restored', 2000);
+  }
+}
+
+function updateAuthUI() {
+  const statusEl = document.getElementById('auth-status');
+  const authBtn = document.getElementById('auth-btn');
+  if (currentUser) {
+    const username = currentUser.email.split('@')[0]; // from email@rescue.local
+    statusEl.innerHTML = `👤 ${username}`;
+    authBtn.textContent = 'Logout';
+    authBtn.onclick = logout;
+  } else {
+    statusEl.innerHTML = 'Not logged in';
+    authBtn.textContent = 'Login';
+    authBtn.onclick = showAuthModal;
+  }
+}
+
+function showAuthModal() {
+  document.getElementById('auth-modal').style.display = 'flex';
+  document.getElementById('auth-message').innerText = '';
+}
+function closeAuthModal() {
+  document.getElementById('auth-modal').style.display = 'none';
+}
+
+function validatePassword(pw) {
+  if (pw.length < 8) return 'Password must be at least 8 characters';
+  if (!/\d/.test(pw)) return 'Password must contain at least one digit';
+  if (!/[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(pw)) return 'Password must contain at least one special character';
+  return null;
+}
+
+async function authSignup() {
+  const username = document.getElementById('auth-username').value.trim();
+  const password = document.getElementById('auth-password').value.trim();
+  if (!username || !password) {
+    document.getElementById('auth-message').innerText = 'Fill both fields';
+    return;
+  }
+  const pwErr = validatePassword(password);
+  if (pwErr) {
+    document.getElementById('auth-message').innerText = pwErr;
+    return;
+  }
+  const email = username + '@rescue.local';
+  const { data, error } = await sb.auth.signUp({ email, password });
+  if (error) {
+    document.getElementById('auth-message').innerText = error.message;
+  } else {
+    toast('✓ Signup successful – you can now log in');
+    closeAuthModal();
+  }
+}
+
+async function authLogin() {
+  const username = document.getElementById('auth-username').value.trim();
+  const password = document.getElementById('auth-password').value.trim();
+  if (!username || !password) {
+    document.getElementById('auth-message').innerText = 'Fill both fields';
+    return;
+  }
+  const email = username + '@rescue.local';
+  const { data, error } = await sb.auth.signInWithPassword({ email, password });
+  if (error) {
+    document.getElementById('auth-message').innerText = error.message;
+  } else {
+    currentUser = data.user;
+    updateAuthUI();
+    closeAuthModal();
+    toast('🔓 Logged in as ' + username);
+  }
+}
+
+async function logout() {
+  await sb.auth.signOut();
+  currentUser = null;
+  updateAuthUI();
+  toast('🔒 Logged out');
+}
+
+// Modified requireAuth: now checks both callsign AND logged-in user
+async function requireAuth() {
+  if (!user || user.length < 6) {
+    document.getElementById('cs-box').classList.add('shake');
+    toast('⚠ Set Callsign first');
+    return false;
+  }
+  if (!currentUser) {
+    showAuthModal();
+    toast('⚠ Please log in to use cloud features');
+    return false;
+  }
+  return true;
+}
+
+// ── Icons & Popups ────────────────────────────────────────────────
+function escHtml(str) {
+  if (!str) return '';
+  return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function mkIcon(emoji) {
+  return L.divIcon({ className:'icon-wrap', html:'<span>'+emoji+'</span>', iconSize:[40,40], iconAnchor:[20,20], popupAnchor:[0,-22] });
+}
+
+function mkSOSIcon() {
+  return L.divIcon({ className:'sos-icon-wrap', html:'<span>🆘</span>', iconSize:[48,48], iconAnchor:[24,24], popupAnchor:[0,-26] });
+}
+
+function mkPop(title, note, author, time, id, media) {
+  var h = media || title || '';
+  if (!media && note) h += '<br><span style="color:var(--text-bright)">'+escHtml(note)+'</span>';
+  var m = '';
+  if (author || time) {
+    m = '<div class="pop-meta">';
+    if (author) m += 'By: '+escHtml(author);
+    if (time)   m += (author?' · ':'')+time;
+    m += '</div>';
+  }
+  return h + m + '<button class="pop-btn" onclick="delLayer('+id+')">🗑 Remove</button>';
+}
+
+// ── SOS Marker ───────────────────────────────────────────────────
+window.dropSOS = function() {
+  toast('🆘 Click map to drop MAYDAY marker!');
+  document.getElementById('map').classList.add('cursor-crosshair');
+  MAP.once('click', function(e) {
+    document.getElementById('map').classList.remove('cursor-crosshair');
+    var details = prompt('MAYDAY details (injuries, persons, situation):', '');
+    var a = user || 'Anonymous';
+    var ts = new Date().toLocaleTimeString();
+    var m = L.marker(e.latlng, { icon: mkSOSIcon(), zIndexOffset: 1000 });
+    m.feature = { type:'Feature', geometry:{ type:'Point', coordinates:[e.latlng.lng,e.latlng.lat] }, properties:{ type:'sos', emoji:'🆘', note:details, createdBy:a, time:ts }};
+    m.bindPopup('<b style="color:#ff4466;font-size:1.1rem">🆘 MAYDAY</b>'+(details?'<br>'+escHtml(details):'')+mkPop(null,null,a,ts,L.stamp(m)));
+    m.addTo(MAP);
+    m.openPopup();
+    drawn.addLayer(m);
+    updateBadge();
+    toast('🆘 MAYDAY marker placed!', 4000);
+  });
+};
+
+// ── Markers ───────────────────────────────────────────────────────
+window.dropMarker = function(type, emoji) {
+  toast('📌 Click map to place');
+  document.getElementById('map').classList.add('cursor-crosshair');
+  MAP.once('click', function(e) {
+    document.getElementById('map').classList.remove('cursor-crosshair');
+    var desc = type==='note' ? prompt('Note:') : prompt('Details (optional):');
+    if (type==='note' && !desc) return;
+    var a  = user || 'Anonymous';
+    var ts = new Date().toLocaleTimeString();
+    var m  = L.marker(e.latlng, { icon: mkIcon(emoji) });
+    m.feature = { type:'Feature', geometry:{ type:'Point', coordinates:[e.latlng.lng,e.latlng.lat] }, properties:{ type:type, emoji:emoji, note:desc, createdBy:a, time:ts }};
+    m.bindPopup(mkPop('<b>'+emoji+' '+type.toUpperCase()+'</b>', desc, a, ts, L.stamp(m)));
+    drawn.addLayer(m);
+    updateBadge();
+  });
+};
+
+// ── Media ─────────────────────────────────────────────────────────
+window.dropMedia = async function() {
+  if (!(await requireAuth())) return;
+  toast('📍 Click map to place media pin');
+  document.getElementById('map').classList.add('cursor-crosshair');
+
+  MAP.once('click', async function(e) {
+    document.getElementById('map').classList.remove('cursor-crosshair');
+    var inp = document.createElement('input');
+    inp.type = 'file'; inp.accept = 'image/*,video/*';
+
+    inp.onchange = async function(ev) {
+      var file = ev.target.files[0]; if (!file) return;
+      var isVid = file.type.startsWith('video/');
+      if (isVid && file.size > 10 * 1024 * 1024) { toast('⚠ Video > 10MB'); return; }
+
+      var blob = file;
+      if (!isVid) {
+        var img = new Image();
+        var objUrl = URL.createObjectURL(file);
+        img.src = objUrl;
+        try { await new Promise(function(res,rej){ img.onload=res; img.onerror=rej; }); }
+        catch(err){ toast('✗ Failed to read image'); URL.revokeObjectURL(objUrl); return; }
+        URL.revokeObjectURL(objUrl);
+        var w=img.width, h=img.height;
+        var maxW=w>h?1280:720, maxH=w>h?720:1280;
+        if(w>maxW||h>maxH){ var ratio=Math.min(maxW/w,maxH/h); w=Math.round(w*ratio); h=Math.round(h*ratio); }
+        var cv=document.createElement('canvas'); cv.width=w; cv.height=h;
+        cv.getContext('2d').drawImage(img,0,0,w,h);
+        blob = await new Promise(function(res){ cv.toBlob(res,'image/webp',0.80); });
+      }
+
+      // Progress bar
+      showProgress(30);
+      var ext  = isVid ? (file.name.split('.').pop() || 'mp4') : 'webp';
+      var fname = secret + '_' + Date.now() + '.' + ext;
+      var up = await sb.storage.from('rescue_media').upload(fname, blob);
+      showProgress(90);
+
+      if (up.error) { toast('✗ Upload failed'); console.error(up.error); hideProgress(); return; }
+      showProgress(100);
+      setTimeout(hideProgress, 500);
+
+      var url = sb.storage.from('rescue_media').getPublicUrl(fname).data.publicUrl;
+      var mh  = isVid
+        ? '<video controls preload="metadata" class="media-thumb" src="'+url+'"></video>'
+        : '<img loading="lazy" src="'+url+'" class="media-thumb"/>';
+
+      var ts = new Date().toLocaleTimeString();
+      var m  = L.marker(e.latlng, { icon: mkIcon('📷') });
+      m.feature = { type:'Feature', geometry:{ type:'Point', coordinates:[e.latlng.lng,e.latlng.lat] }, properties:{ type:'media', mediaUrl:url, isVideo:isVid, createdBy:user, time:ts }};
+      m.bindPopup(mkPop(null, null, user, ts, L.stamp(m), mh));
+      drawn.addLayer(m);
+      updateBadge();
+      toast('✓ Media pinned');
+    };
+    inp.click();
+  });
+};
+
+// ── Upload progress bar ───────────────────────────────────────────
+function showProgress(pct) {
+  var bar = document.getElementById('upload-bar');
+  bar.style.opacity = '1'; bar.style.width = pct + '%';
+}
+function hideProgress() {
+  var bar = document.getElementById('upload-bar');
+  bar.style.opacity = '0'; bar.style.width = '0%';
+}
+
+// ── Drawing ───────────────────────────────────────────────────────
+window.draw = function(t) {
+  // Disable all handlers first
+  Object.values(handlers).forEach(function(h){ try{ h.disable(); }catch(x){} });
+  clearActiveDrawBtn();
+  if (activeDrawTool === t) { activeDrawTool = null; hideCancelBar(); return; }
+  handlers[t].enable();
+  activeDrawTool = t;
+  document.getElementById('btn-draw-'+t).classList.add('active-tool');
+  showCancelBar();
+};
+
+window.cancelDraw = function() {
+  Object.values(handlers).forEach(function(h){ try{ h.disable(); }catch(x){} });
+  clearActiveDrawBtn();
+  activeDrawTool = null;
+  hideCancelBar();
+  toast('Drawing cancelled');
+};
+
+function clearActiveDrawBtn() {
+  ['search','clear','route'].forEach(function(t){
+    var el = document.getElementById('btn-draw-'+t);
+    if (el) el.classList.remove('active-tool');
+  });
+}
+
+function showCancelBar() { document.getElementById('cancel-bar').classList.add('visible'); }
+function hideCancelBar() { document.getElementById('cancel-bar').classList.remove('visible'); }
+
+// ── Undo ─────────────────────────────────────────────────────────
+window.undoLast = function() {
+  var layers = drawn.getLayers();
+  if (!layers.length) { toast('Nothing to undo'); return; }
+  drawn.removeLayer(layers[layers.length - 1]);
+  updateBadge();
+  toast('↩ Removed last item');
+};
+
+// ── Measure (bearing + distance) ─────────────────────────────────
+window.toggleMeasure = function() {
+  measureMode = !measureMode;
+  var btn = document.getElementById('btn-measure');
+  if (measureMode) {
+    btn.classList.add('active-tool');
+    measurePoints = []; clearMeasureOverlay();
+    toast('📐 Click two points to measure distance & bearing');
+  } else {
+    btn.classList.remove('active-tool');
+    clearMeasureOverlay();
+    document.getElementById('measure-result').style.display = 'none';
+  }
+};
+
+function handleMeasureClick(e) {
+  measurePoints.push(e.latlng);
+  var dot = L.circleMarker(e.latlng, { radius:5, color:'#FFCE1F', fillColor:'#FFCE1F', fillOpacity:1, weight:2 });
+  dot.addTo(MAP); measureMarkers.push(dot);
+
+  if (measurePoints.length === 2) {
+    var a = measurePoints[0], b = measurePoints[1];
+
+    // Distance (Haversine)
+    var R = 6371000;
+    var φ1 = a.lat * Math.PI/180, φ2 = b.lat * Math.PI/180;
+    var Δφ = (b.lat - a.lat) * Math.PI/180;
+    var Δλ = (b.lng - a.lng) * Math.PI/180;
+    var aa = Math.sin(Δφ/2)*Math.sin(Δφ/2) + Math.cos(φ1)*Math.cos(φ2)*Math.sin(Δλ/2)*Math.sin(Δλ/2);
+    var dist = R * 2 * Math.atan2(Math.sqrt(aa), Math.sqrt(1-aa));
+
+    // Bearing
+    var y = Math.sin(Δλ)*Math.cos(φ2);
+    var x = Math.cos(φ1)*Math.sin(φ2) - Math.sin(φ1)*Math.cos(φ2)*Math.cos(Δλ);
+    var bearing = ((Math.atan2(y,x) * 180/Math.PI) + 360) % 360;
+
+    // Draw line
+    if (measureLine) MAP.removeLayer(measureLine);
+    measureLine = L.polyline([a,b], { color:'#FFCE1F', weight:2, dashArray:'6,8' }).addTo(MAP);
+
+    var distStr = dist >= 1000 ? (dist/1000).toFixed(2)+' km' : Math.round(dist)+' m';
+    var panel = document.getElementById('measure-result');
+    panel.innerHTML = '📐 <b>'+distStr+'</b> &nbsp; | &nbsp; 🧭 <b>'+bearing.toFixed(1)+'°</b>';
+    panel.style.display = 'block';
+
+    // Reset for next pair
+    measurePoints = [];
+  }
+}
+
+function clearMeasureOverlay() {
+  measureMarkers.forEach(function(m){ MAP.removeLayer(m); });
+  measureMarkers = [];
+  if (measureLine) { MAP.removeLayer(measureLine); measureLine = null; }
+}
+
+// ── Geocode search ────────────────────────────────────────────────
+window.geocode = function() {
+  var q = document.getElementById('geocode-input').value.trim();
+  if (!q) return;
+  fetch('https://nominatim.openstreetmap.org/search?format=json&limit=5&q=' + encodeURIComponent(q))
+    .then(function(r){ return r.json(); })
+    .then(function(results) {
+      var box = document.getElementById('geocode-results');
+      box.innerHTML = '';
+      if (!results.length) { toast('No results found'); return; }
+      box.style.display = 'block';
+      results.forEach(function(r) {
+        var d = document.createElement('div');
+        d.textContent = r.display_name;
+        d.onclick = function() {
+          MAP.setView([parseFloat(r.lat), parseFloat(r.lon)], 15);
+          box.style.display = 'none';
+          document.getElementById('geocode-input').value = '';
+        };
+        box.appendChild(d);
+      });
+    }).catch(function(){ toast('⚠ Geocode unavailable'); });
+};
+
+// Close geocode results on outside click
+document.addEventListener('click', function(e) {
+  var box = document.getElementById('geocode-results');
+  if (box && !box.closest('#geocode-box') && !e.target.closest('#geocode-box')) {
+    box.style.display = 'none';
+  }
+});
+
+// ── Cloud ─────────────────────────────────────────────────────────
+window.pushCloud = async function() {
+  if (!(await requireAuth())) return;
+  if (!drawn.getLayers().length) { toast('⚠ Nothing to push'); return; }
+  toast('☁ Saving...');
+  var res = await sb.from('rescue_features').insert([{ operation_id:secret, geojson:drawn.toGeoJSON() }]);
+  toast(res.error ? '✗ Save failed — check RLS' : '✓ Saved to cloud · snapshot '+ new Date().toLocaleTimeString());
+  if (res.error) console.error(res.error);
+};
+
+window.pullCloud = async function() {
+  if (!(await requireAuth())) return;
+  toast('📥 Loading...');
+  var res = await sb.from('rescue_features').select('geojson,created_at').eq('operation_id',secret).order('created_at',{ascending:false}).limit(1);
+  if (res.error) { toast('✗ Pull failed'); console.error(res.error); return; }
+  if (!res.data || !res.data.length) { toast('⚠ No data for this op'); return; }
+
+  drawn.clearLayers();
+  L.geoJSON(res.data[0].geojson, {
+    pointToLayer: function(f,ll) {
+      return L.marker(ll, { icon: f.properties.type==='sos' ? mkSOSIcon() : mkIcon(f.properties.emoji || '📍'), zIndexOffset: f.properties.type==='sos'?1000:0 });
+    },
+    onEachFeature: function(f,layer) {
+      drawn.addLayer(layer);
+      var p = f.properties, id = L.stamp(layer);
+      if (p.mediaUrl) {
+        var mh = p.isVideo
+          ? '<video controls preload="metadata" class="media-thumb" src="'+p.mediaUrl+'"></video>'
+          : '<img loading="lazy" src="'+p.mediaUrl+'" class="media-thumb"/>';
+        if (!p.isVideo) { var pre=new Image(); pre.src=p.mediaUrl; }
+        layer.bindPopup(mkPop(null, null, p.createdBy, p.time, id, mh));
+      } else {
+        layer.bindPopup(mkPop('<b>'+(p.name||p.type||'Marker')+'</b>', p.note, p.createdBy, p.time, id));
+      }
+    }
+  });
+  try { MAP.fitBounds(drawn.getBounds(), { padding:[40,40] }); } catch(e){}
+  updateBadge();
+  toast('✓ Map loaded · snapshot from '+new Date(res.data[0].created_at).toLocaleTimeString());
+};
+
+// ── Export GeoJSON ────────────────────────────────────────────────
+window.exportGeoJSON = function() {
+  if (!drawn.getLayers().length) { toast('⚠ Nothing to export'); return; }
+  var data = JSON.stringify(drawn.toGeoJSON(), null, 2);
+  var blob = new Blob([data], { type:'application/json' });
+  var url  = URL.createObjectURL(blob);
+  var a    = document.createElement('a');
+  a.href   = url;
+  a.download = 'rescue_op_' + secret.slice(0,6) + '_' + Date.now() + '.geojson';
+  a.click();
+  URL.revokeObjectURL(url);
+  toast('⬇ GeoJSON downloaded');
+};
+
+// ── Helpers ───────────────────────────────────────────────────────
+window.delLayer  = function(id){ drawn.removeLayer(id); updateBadge(); };
+window.gps       = function(){ MAP.locate({setView:true,maxZoom:16}); toast('📍 Locating...'); };
+window.clearMap  = function(){ if(confirm('Clear local map?')){ drawn.clearLayers(); updateBadge(); } };
+window.copyLink  = function(){ navigator.clipboard.writeText(location.href); toast('✓ Link copied'); };
+window.toggleMenv = function(){
+  document.getElementById('menv-toggle').classList.toggle('open');
+  document.getElementById('tools-panel').classList.toggle('open');
+};
+
+document.addEventListener('keydown', function(e){
+  if (e.target.tagName === 'INPUT') return;
+  if (e.key==='m'||e.key==='M') toggleMenv();
+  if (e.key==='Escape') {
+    if (handlers) Object.values(handlers).forEach(function(h){ try{ h.disable(); }catch(x){} });
+    clearActiveDrawBtn(); activeDrawTool=null; hideCancelBar();
+    if (measureMode) { measureMode=false; clearMeasureOverlay(); document.getElementById('btn-measure').classList.remove('active-tool'); }
+  }
+});
+</script>
+</body>
+</html>
