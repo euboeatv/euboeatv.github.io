@@ -1,0 +1,753 @@
+<!DOCTYPE html>
+<html lang="en"><head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Euboean TV Admin - Playlist Editor</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: 'Segoe UI', Roboto, system-ui, sans-serif;
+            background: #1e1e2f;
+            color: #e0e0e0;
+            padding: 30px 20px;
+            min-height: 100vh;
+        }
+        h1, h2 {
+            font-weight: 300;
+            border-bottom: 1px solid #3a3a5a;
+            padding-bottom: 8px;
+            margin-bottom: 20px;
+        }
+        h1 { color: #f6de81; font-size: 1.8rem; }
+        h2 { color: #a0a0c0; font-size: 1.1rem; }
+        .container { max-width: 1200px; margin: 0 auto; }
+        .panel {
+            background: #2a2a3c;
+            border-radius: 16px;
+            padding: 20px;
+            margin-bottom: 30px;
+            box-shadow: 0 10px 20px rgba(0,0,0,0.5);
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            background: #1e1e2f;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.3);
+        }
+        th {
+            background: #3a3a5a;
+            color: #f6de81;
+            font-weight: 500;
+            padding: 12px 8px;
+            text-align: left;
+            font-size: 0.85rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        td { padding: 10px 8px; border-bottom: 1px solid #33334b; vertical-align: middle; }
+        tr:last-child td { border-bottom: none; }
+        tr:hover td { background: rgba(255,255,255,0.02); }
+        input, select {
+            width: 100%;
+            padding: 8px 10px;
+            background: #252538;
+            border: 1px solid #4a4a6a;
+            color: #fff;
+            border-radius: 6px;
+            font-size: 0.9rem;
+        }
+        input:focus, select:focus { outline: none; border-color: #f6de81; box-shadow: 0 0 0 2px rgba(246,222,129,0.15); }
+        .btn {
+            background: #4a4a6a;
+            border: 1px solid transparent;
+            color: white;
+            padding: 10px 20px;
+            border-radius: 40px;
+            cursor: pointer;
+            font-weight: 500;
+            transition: background 0.2s;
+            margin-right: 8px;
+            font-size: 0.9rem;
+        }
+        .btn:hover { background: #5f5f82; }
+        .btn-primary { background: #c44536; border-color: #f6de81; }
+        .btn-primary:hover { background: #d55a4a; }
+        .btn-danger { background: #8b2c2c; border: none; color: white; padding: 8px 14px; border-radius: 40px; cursor: pointer; font-size: 0.85rem; }
+        .btn-danger:hover { background: #a53a3a; }
+        .btn-success { background: #2a6e3f; border-color: #3dd97a; }
+        .btn-success:hover { background: #358050; }
+        .action-cell { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+        .footer { margin-top: 30px; text-align: center; opacity: 0.7; font-size: 0.9rem; padding-bottom: 20px; }
+        .note {
+            background: #2a2a3c;
+            border-left: 4px solid #f6de81;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 20px 0;
+            line-height: 1.7;
+        }
+        .note code {
+            background: #1e1e2f;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-family: monospace;
+            color: #f6de81;
+        }
+        #save-status {
+            display: inline-block;
+            margin-left: 12px;
+            font-size: 0.85rem;
+            opacity: 0;
+            transition: opacity 0.3s;
+            color: #3dd97a;
+            vertical-align: middle;
+        }
+        #save-status.show { opacity: 1; }
+        .badge {
+            display: inline-block;
+            padding: 3px 8px;
+            border-radius: 20px;
+            font-size: 0.7rem;
+            font-weight: bold;
+            letter-spacing: 0.5px;
+        }
+        .badge-yt { background: #ff3b30; color: white; }
+        .badge-dm { background: #0a84ff; color: white; }
+        .row-num { color: #888; font-size: 0.85rem; min-width: 20px; }
+        .col-num  { width: 40px; }
+        .col-type { width: 140px; }
+        .col-id   { } /* flex */
+        .col-act  { width: 60px; }
+
+        /* drag handle */
+        .drag-handle { cursor: grab; color: #555; font-size: 1.1rem; padding: 0 6px; }
+        .drag-handle:active { cursor: grabbing; }
+        tr.dragging { opacity: 0.4; }
+        tr.drag-over td { border-top: 2px solid #f6de81; }
+
+        /* IMPROVEMENT: live preview badge next to type select */
+        .type-badge-preview { margin-left: 6px; }
+    </style>
+</head>
+<body>
+<div class="container">
+    <h1>⚡ Euboean TV · Playlist Admin</h1>
+
+    <div class="note">
+        <strong>⚙️ How this works:</strong><br>
+        Edit the playlist below, then click <strong>⬇️ Download Updated admin.html</strong>.
+        Upload the downloaded file to your server, replacing this file.
+        <code>index.html</code> fetches the playlist directly from this file on every page load —
+        no database, no backend, no fuss.<br><br>
+        <strong>💡 Tip:</strong> You can drag rows to reorder them. The order here is the broadcast order on TV.
+    </div>
+
+    <div class="panel">
+        <h2>📋 Master Playlist (Broadcast Order)</h2>
+        <table id="combined-table">
+            <thead>
+                <tr>
+                    <th class="col-num">#</th>
+                    <th style="width:30px;"></th>
+                    <th class="col-type">Platform</th>
+                    <th class="col-id">Video ID</th>
+                    <th class="col-act">Del</th>
+                </tr>
+            </thead>
+            <tbody id="combined-tbody">
+            <tr data-index="0" draggable="true">
+                <td class="col-num row-num">1</td>
+                <td><span class="drag-handle" title="Drag to reorder">⠿</span></td>
+                <td class="col-type">
+                    <select class="type-select" data-index="0">
+                        <option value="yt" selected="">YouTube</option>
+                        <option value="dm">Dailymotion</option>
+                    </select>
+                </td>
+                <td class="col-id">
+                    <input type="text" class="id-input" data-index="0" value="5v3Zq84YQ6I" placeholder="Paste Video ID here…">
+                </td>
+                <td class="col-act action-cell">
+                    <button class="btn-danger" onclick="deleteItem(0)" title="Delete">🗑️</button>
+                </td>
+            </tr>
+            <tr data-index="1" draggable="true">
+                <td class="col-num row-num">2</td>
+                <td><span class="drag-handle" title="Drag to reorder">⠿</span></td>
+                <td class="col-type">
+                    <select class="type-select" data-index="1">
+                        <option value="yt" selected="">YouTube</option>
+                        <option value="dm">Dailymotion</option>
+                    </select>
+                </td>
+                <td class="col-id">
+                    <input type="text" class="id-input" data-index="1" value="11qXS8bXdsc" placeholder="Paste Video ID here…">
+                </td>
+                <td class="col-act action-cell">
+                    <button class="btn-danger" onclick="deleteItem(1)" title="Delete">🗑️</button>
+                </td>
+            </tr>
+            <tr data-index="2" draggable="true">
+                <td class="col-num row-num">3</td>
+                <td><span class="drag-handle" title="Drag to reorder">⠿</span></td>
+                <td class="col-type">
+                    <select class="type-select" data-index="2">
+                        <option value="yt">YouTube</option>
+                        <option value="dm" selected="">Dailymotion</option>
+                    </select>
+                </td>
+                <td class="col-id">
+                    <input type="text" class="id-input" data-index="2" value="x6cxefe" placeholder="Paste Video ID here…">
+                </td>
+                <td class="col-act action-cell">
+                    <button class="btn-danger" onclick="deleteItem(2)" title="Delete">🗑️</button>
+                </td>
+            </tr>
+            <tr data-index="3" draggable="true">
+                <td class="col-num row-num">4</td>
+                <td><span class="drag-handle" title="Drag to reorder">⠿</span></td>
+                <td class="col-type">
+                    <select class="type-select" data-index="3">
+                        <option value="yt" selected="">YouTube</option>
+                        <option value="dm">Dailymotion</option>
+                    </select>
+                </td>
+                <td class="col-id">
+                    <input type="text" class="id-input" data-index="3" value="7263YsyaDBc" placeholder="Paste Video ID here…">
+                </td>
+                <td class="col-act action-cell">
+                    <button class="btn-danger" onclick="deleteItem(3)" title="Delete">🗑️</button>
+                </td>
+            </tr>
+            <tr data-index="4" draggable="true">
+                <td class="col-num row-num">5</td>
+                <td><span class="drag-handle" title="Drag to reorder">⠿</span></td>
+                <td class="col-type">
+                    <select class="type-select" data-index="4">
+                        <option value="yt" selected="">YouTube</option>
+                        <option value="dm">Dailymotion</option>
+                    </select>
+                </td>
+                <td class="col-id">
+                    <input type="text" class="id-input" data-index="4" value="PelzSnmwQ-M" placeholder="Paste Video ID here…">
+                </td>
+                <td class="col-act action-cell">
+                    <button class="btn-danger" onclick="deleteItem(4)" title="Delete">🗑️</button>
+                </td>
+            </tr>
+            <tr data-index="5" draggable="true">
+                <td class="col-num row-num">6</td>
+                <td><span class="drag-handle" title="Drag to reorder">⠿</span></td>
+                <td class="col-type">
+                    <select class="type-select" data-index="5">
+                        <option value="yt">YouTube</option>
+                        <option value="dm" selected="">Dailymotion</option>
+                    </select>
+                </td>
+                <td class="col-id">
+                    <input type="text" class="id-input" data-index="5" value="x7z8t1c" placeholder="Paste Video ID here…">
+                </td>
+                <td class="col-act action-cell">
+                    <button class="btn-danger" onclick="deleteItem(5)" title="Delete">🗑️</button>
+                </td>
+            </tr>
+            <tr data-index="6" draggable="true">
+                <td class="col-num row-num">7</td>
+                <td><span class="drag-handle" title="Drag to reorder">⠿</span></td>
+                <td class="col-type">
+                    <select class="type-select" data-index="6">
+                        <option value="yt" selected="">YouTube</option>
+                        <option value="dm">Dailymotion</option>
+                    </select>
+                </td>
+                <td class="col-id">
+                    <input type="text" class="id-input" data-index="6" value="lmVAb_7vzYA" placeholder="Paste Video ID here…">
+                </td>
+                <td class="col-act action-cell">
+                    <button class="btn-danger" onclick="deleteItem(6)" title="Delete">🗑️</button>
+                </td>
+            </tr>
+            <tr data-index="7" draggable="true">
+                <td class="col-num row-num">8</td>
+                <td><span class="drag-handle" title="Drag to reorder">⠿</span></td>
+                <td class="col-type">
+                    <select class="type-select" data-index="7">
+                        <option value="yt" selected="">YouTube</option>
+                        <option value="dm">Dailymotion</option>
+                    </select>
+                </td>
+                <td class="col-id">
+                    <input type="text" class="id-input" data-index="7" value="w7k5xPIpuN0" placeholder="Paste Video ID here…">
+                </td>
+                <td class="col-act action-cell">
+                    <button class="btn-danger" onclick="deleteItem(7)" title="Delete">🗑️</button>
+                </td>
+            </tr>
+            <tr data-index="8" draggable="true">
+                <td class="col-num row-num">9</td>
+                <td><span class="drag-handle" title="Drag to reorder">⠿</span></td>
+                <td class="col-type">
+                    <select class="type-select" data-index="8">
+                        <option value="yt" selected="">YouTube</option>
+                        <option value="dm">Dailymotion</option>
+                    </select>
+                </td>
+                <td class="col-id">
+                    <input type="text" class="id-input" data-index="8" value="wyVTQdW3d_Q" placeholder="Paste Video ID here…">
+                </td>
+                <td class="col-act action-cell">
+                    <button class="btn-danger" onclick="deleteItem(8)" title="Delete">🗑️</button>
+                </td>
+            </tr>
+            <tr data-index="9" draggable="true">
+                <td class="col-num row-num">10</td>
+                <td><span class="drag-handle" title="Drag to reorder">⠿</span></td>
+                <td class="col-type">
+                    <select class="type-select" data-index="9">
+                        <option value="yt" selected="">YouTube</option>
+                        <option value="dm">Dailymotion</option>
+                    </select>
+                </td>
+                <td class="col-id">
+                    <input type="text" class="id-input" data-index="9" value="RVWadttGEPM" placeholder="Paste Video ID here…">
+                </td>
+                <td class="col-act action-cell">
+                    <button class="btn-danger" onclick="deleteItem(9)" title="Delete">🗑️</button>
+                </td>
+            </tr>
+            <tr data-index="10" draggable="true">
+                <td class="col-num row-num">11</td>
+                <td><span class="drag-handle" title="Drag to reorder">⠿</span></td>
+                <td class="col-type">
+                    <select class="type-select" data-index="10">
+                        <option value="yt" selected="">YouTube</option>
+                        <option value="dm">Dailymotion</option>
+                    </select>
+                </td>
+                <td class="col-id">
+                    <input type="text" class="id-input" data-index="10" value="6aM2IvVudxM" placeholder="Paste Video ID here…">
+                </td>
+                <td class="col-act action-cell">
+                    <button class="btn-danger" onclick="deleteItem(10)" title="Delete">🗑️</button>
+                </td>
+            </tr>
+            <tr data-index="11" draggable="true">
+                <td class="col-num row-num">12</td>
+                <td><span class="drag-handle" title="Drag to reorder">⠿</span></td>
+                <td class="col-type">
+                    <select class="type-select" data-index="11">
+                        <option value="yt" selected="">YouTube</option>
+                        <option value="dm">Dailymotion</option>
+                    </select>
+                </td>
+                <td class="col-id">
+                    <input type="text" class="id-input" data-index="11" value="PyLNiOkzyRU" placeholder="Paste Video ID here…">
+                </td>
+                <td class="col-act action-cell">
+                    <button class="btn-danger" onclick="deleteItem(11)" title="Delete">🗑️</button>
+                </td>
+            </tr>
+            <tr data-index="12" draggable="true">
+                <td class="col-num row-num">13</td>
+                <td><span class="drag-handle" title="Drag to reorder">⠿</span></td>
+                <td class="col-type">
+                    <select class="type-select" data-index="12">
+                        <option value="yt" selected="">YouTube</option>
+                        <option value="dm">Dailymotion</option>
+                    </select>
+                </td>
+                <td class="col-id">
+                    <input type="text" class="id-input" data-index="12" value="FGWICvtZn74" placeholder="Paste Video ID here…">
+                </td>
+                <td class="col-act action-cell">
+                    <button class="btn-danger" onclick="deleteItem(12)" title="Delete">🗑️</button>
+                </td>
+            </tr>
+            <tr data-index="13" draggable="true">
+                <td class="col-num row-num">14</td>
+                <td><span class="drag-handle" title="Drag to reorder">⠿</span></td>
+                <td class="col-type">
+                    <select class="type-select" data-index="13">
+                        <option value="yt" selected="">YouTube</option>
+                        <option value="dm">Dailymotion</option>
+                    </select>
+                </td>
+                <td class="col-id">
+                    <input type="text" class="id-input" data-index="13" value="QWs56m8QniI" placeholder="Paste Video ID here…">
+                </td>
+                <td class="col-act action-cell">
+                    <button class="btn-danger" onclick="deleteItem(13)" title="Delete">🗑️</button>
+                </td>
+            </tr>
+            <tr data-index="14" draggable="true">
+                <td class="col-num row-num">15</td>
+                <td><span class="drag-handle" title="Drag to reorder">⠿</span></td>
+                <td class="col-type">
+                    <select class="type-select" data-index="14">
+                        <option value="yt" selected="">YouTube</option>
+                        <option value="dm">Dailymotion</option>
+                    </select>
+                </td>
+                <td class="col-id">
+                    <input type="text" class="id-input" data-index="14" value="0URH98uvG7w" placeholder="Paste Video ID here…">
+                </td>
+                <td class="col-act action-cell">
+                    <button class="btn-danger" onclick="deleteItem(14)" title="Delete">🗑️</button>
+                </td>
+            </tr></tbody>
+        </table>
+        <div style="margin-top: 20px; display:flex; align-items:center; flex-wrap:wrap; gap:10px;">
+            <button class="btn btn-primary" id="add-row-combined">➕ Add New Item</button>
+            <button class="btn btn-success" id="download-btn">⬇️ Download Updated admin.html</button>
+            <span id="save-status">✓ Downloaded!</span>
+        </div>
+    </div>
+
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:20px;">
+        <div class="panel">
+            <h2>▶️ YouTube Only</h2>
+            <table>
+                <thead><tr><th>#</th><th>Video ID</th><th>Del</th></tr></thead>
+                <tbody id="yt-tbody"><tr>
+                <td class="row-num">1</td>
+                <td><input type="text" value="5v3Zq84YQ6I" onchange="updateMasterId(0, this.value.trim())"></td>
+                <td class="action-cell">
+                    <button class="btn-danger" onclick="deleteItem(0)">🗑️</button>
+                </td>
+            </tr><tr>
+                <td class="row-num">2</td>
+                <td><input type="text" value="11qXS8bXdsc" onchange="updateMasterId(1, this.value.trim())"></td>
+                <td class="action-cell">
+                    <button class="btn-danger" onclick="deleteItem(1)">🗑️</button>
+                </td>
+            </tr><tr>
+                <td class="row-num">3</td>
+                <td><input type="text" value="7263YsyaDBc" onchange="updateMasterId(3, this.value.trim())"></td>
+                <td class="action-cell">
+                    <button class="btn-danger" onclick="deleteItem(3)">🗑️</button>
+                </td>
+            </tr><tr>
+                <td class="row-num">4</td>
+                <td><input type="text" value="PelzSnmwQ-M" onchange="updateMasterId(4, this.value.trim())"></td>
+                <td class="action-cell">
+                    <button class="btn-danger" onclick="deleteItem(4)">🗑️</button>
+                </td>
+            </tr><tr>
+                <td class="row-num">5</td>
+                <td><input type="text" value="lmVAb_7vzYA" onchange="updateMasterId(6, this.value.trim())"></td>
+                <td class="action-cell">
+                    <button class="btn-danger" onclick="deleteItem(6)">🗑️</button>
+                </td>
+            </tr><tr>
+                <td class="row-num">6</td>
+                <td><input type="text" value="w7k5xPIpuN0" onchange="updateMasterId(7, this.value.trim())"></td>
+                <td class="action-cell">
+                    <button class="btn-danger" onclick="deleteItem(7)">🗑️</button>
+                </td>
+            </tr><tr>
+                <td class="row-num">7</td>
+                <td><input type="text" value="wyVTQdW3d_Q" onchange="updateMasterId(8, this.value.trim())"></td>
+                <td class="action-cell">
+                    <button class="btn-danger" onclick="deleteItem(8)">🗑️</button>
+                </td>
+            </tr><tr>
+                <td class="row-num">8</td>
+                <td><input type="text" value="RVWadttGEPM" onchange="updateMasterId(9, this.value.trim())"></td>
+                <td class="action-cell">
+                    <button class="btn-danger" onclick="deleteItem(9)">🗑️</button>
+                </td>
+            </tr><tr>
+                <td class="row-num">9</td>
+                <td><input type="text" value="6aM2IvVudxM" onchange="updateMasterId(10, this.value.trim())"></td>
+                <td class="action-cell">
+                    <button class="btn-danger" onclick="deleteItem(10)">🗑️</button>
+                </td>
+            </tr><tr>
+                <td class="row-num">10</td>
+                <td><input type="text" value="PyLNiOkzyRU" onchange="updateMasterId(11, this.value.trim())"></td>
+                <td class="action-cell">
+                    <button class="btn-danger" onclick="deleteItem(11)">🗑️</button>
+                </td>
+            </tr><tr>
+                <td class="row-num">11</td>
+                <td><input type="text" value="FGWICvtZn74" onchange="updateMasterId(12, this.value.trim())"></td>
+                <td class="action-cell">
+                    <button class="btn-danger" onclick="deleteItem(12)">🗑️</button>
+                </td>
+            </tr><tr>
+                <td class="row-num">12</td>
+                <td><input type="text" value="QWs56m8QniI" onchange="updateMasterId(13, this.value.trim())"></td>
+                <td class="action-cell">
+                    <button class="btn-danger" onclick="deleteItem(13)">🗑️</button>
+                </td>
+            </tr><tr>
+                <td class="row-num">13</td>
+                <td><input type="text" value="0URH98uvG7w" onchange="updateMasterId(14, this.value.trim())"></td>
+                <td class="action-cell">
+                    <button class="btn-danger" onclick="deleteItem(14)">🗑️</button>
+                </td>
+            </tr></tbody>
+            </table>
+        </div>
+        <div class="panel">
+            <h2>🎦 Dailymotion Only</h2>
+            <table>
+                <thead><tr><th>#</th><th>Video ID</th><th>Del</th></tr></thead>
+                <tbody id="dm-tbody"><tr>
+                <td class="row-num">1</td>
+                <td><input type="text" value="x6cxefe" onchange="updateMasterId(2, this.value.trim())"></td>
+                <td class="action-cell">
+                    <button class="btn-danger" onclick="deleteItem(2)">🗑️</button>
+                </td>
+            </tr><tr>
+                <td class="row-num">2</td>
+                <td><input type="text" value="x7z8t1c" onchange="updateMasterId(5, this.value.trim())"></td>
+                <td class="action-cell">
+                    <button class="btn-danger" onclick="deleteItem(5)">🗑️</button>
+                </td>
+            </tr></tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="footer">
+        Euboean TV · Edits are live instantly in all views · Download &amp; re-upload to publish
+    </div>
+</div>
+
+<script>
+    // ================================================================
+    // PLAYLIST — single source of truth.
+    // Now contains the same items as legit.html (converted to yt/dm)
+    // ================================================================
+    window.__EUBOEAN_PLAYLIST__ = [
+            {
+                    "id": "5v3Zq84YQ6I",
+                    "type": "yt"
+            },
+            {
+                    "id": "11qXS8bXdsc",
+                    "type": "yt"
+            },
+            {
+                    "id": "x6cxefe",
+                    "type": "dm"
+            },
+            {
+                    "id": "7263YsyaDBc",
+                    "type": "yt"
+            },
+            {
+                    "id": "PelzSnmwQ-M",
+                    "type": "yt"
+            },
+            {
+                    "id": "x7z8t1c",
+                    "type": "dm"
+            },
+            {
+                    "id": "lmVAb_7vzYA",
+                    "type": "yt"
+            },
+            {
+                    "id": "w7k5xPIpuN0",
+                    "type": "yt"
+            },
+            {
+                    "id": "wyVTQdW3d_Q",
+                    "type": "yt"
+            },
+            {
+                    "id": "RVWadttGEPM",
+                    "type": "yt"
+            },
+            {
+                    "id": "6aM2IvVudxM",
+                    "type": "yt"
+            },
+            {
+                    "id": "PyLNiOkzyRU",
+                    "type": "yt"
+            },
+            {
+                    "id": "FGWICvtZn74",
+                    "type": "yt"
+            },
+            {
+                    "id": "QWs56m8QniI",
+                    "type": "yt"
+            },
+            {
+                    "id": "0URH98uvG7w",
+                    "type": "yt"
+            }
+    ];
+    // ================================================================
+
+    let masterPlaylist = window.__EUBOEAN_PLAYLIST__.map(item => ({ ...item }));
+
+    function renderAll() { renderCombined(); renderYT(); renderDM(); }
+
+    // ---- IMPROVED: Combined table with drag-to-reorder ----
+    function renderCombined() {
+        const tbody = document.getElementById('combined-tbody');
+        if (!tbody) return;
+        tbody.innerHTML = masterPlaylist.map((item, index) => `
+            <tr data-index="${index}" draggable="true">
+                <td class="col-num row-num">${index + 1}</td>
+                <td><span class="drag-handle" title="Drag to reorder">⠿</span></td>
+                <td class="col-type">
+                    <select class="type-select" data-index="${index}">
+                        <option value="yt" ${item.type === 'yt' ? 'selected' : ''}>YouTube</option>
+                        <option value="dm" ${item.type === 'dm' ? 'selected' : ''}>Dailymotion</option>
+                    </select>
+                </td>
+                <td class="col-id">
+                    <input type="text" class="id-input" data-index="${index}"
+                           value="${escHtml(item.id)}" placeholder="Paste Video ID here…">
+                </td>
+                <td class="col-act action-cell">
+                    <button class="btn-danger" onclick="deleteItem(${index})" title="Delete">🗑️</button>
+                </td>
+            </tr>`).join('');
+
+        // Type select listeners
+        tbody.querySelectorAll('.type-select').forEach(sel => {
+            sel.addEventListener('change', function () {
+                masterPlaylist[+this.dataset.index].type = this.value;
+                renderAll();
+            });
+        });
+
+        // ID input listeners (live update, re-render on blur)
+        tbody.querySelectorAll('.id-input').forEach(inp => {
+            inp.addEventListener('input', function () {
+                masterPlaylist[+this.dataset.index].id = this.value.trim();
+            });
+            inp.addEventListener('blur', () => renderAll());
+        });
+
+        // Drag-to-reorder
+        let dragSrc = null;
+        tbody.querySelectorAll('tr').forEach(row => {
+            row.addEventListener('dragstart', e => {
+                dragSrc = row;
+                row.classList.add('dragging');
+                e.dataTransfer.effectAllowed = 'move';
+            });
+            row.addEventListener('dragend', () => {
+                tbody.querySelectorAll('tr').forEach(r => r.classList.remove('dragging', 'drag-over'));
+            });
+            row.addEventListener('dragover', e => {
+                e.preventDefault();
+                tbody.querySelectorAll('tr').forEach(r => r.classList.remove('drag-over'));
+                if (row !== dragSrc) row.classList.add('drag-over');
+            });
+            row.addEventListener('drop', e => {
+                e.preventDefault();
+                if (!dragSrc || dragSrc === row) return;
+                const fromIdx = +dragSrc.dataset.index;
+                const toIdx   = +row.dataset.index;
+                const [moved] = masterPlaylist.splice(fromIdx, 1);
+                masterPlaylist.splice(toIdx, 0, moved);
+                renderAll();
+            });
+        });
+    }
+
+    function renderYT() {
+        const tbody = document.getElementById('yt-tbody');
+        if (!tbody) return;
+        let rowNum = 0;
+        tbody.innerHTML = masterPlaylist.map((item, originalIndex) => {
+            if (item.type !== 'yt') return '';
+            rowNum++;
+            return `<tr>
+                <td class="row-num">${rowNum}</td>
+                <td><input type="text" value="${escHtml(item.id)}"
+                           onchange="updateMasterId(${originalIndex}, this.value.trim())"></td>
+                <td class="action-cell">
+                    <button class="btn-danger" onclick="deleteItem(${originalIndex})">🗑️</button>
+                </td>
+            </tr>`;
+        }).join('');
+    }
+
+    function renderDM() {
+        const tbody = document.getElementById('dm-tbody');
+        if (!tbody) return;
+        let rowNum = 0;
+        tbody.innerHTML = masterPlaylist.map((item, originalIndex) => {
+            if (item.type !== 'dm') return '';
+            rowNum++;
+            return `<tr>
+                <td class="row-num">${rowNum}</td>
+                <td><input type="text" value="${escHtml(item.id)}"
+                           onchange="updateMasterId(${originalIndex}, this.value.trim())"></td>
+                <td class="action-cell">
+                    <button class="btn-danger" onclick="deleteItem(${originalIndex})">🗑️</button>
+                </td>
+            </tr>`;
+        }).join('');
+    }
+
+    function updateMasterId(index, newId) {
+        if (masterPlaylist[index]) {
+            masterPlaylist[index].id = newId;
+            renderAll();
+        }
+    }
+
+    function deleteItem(index) {
+        if (masterPlaylist.length <= 1) { alert('Cannot delete — must keep at least one item.'); return; }
+        masterPlaylist.splice(index, 1);
+        renderAll();
+    }
+
+    function escHtml(str) {
+        return String(str || '')
+            .replace(/&/g, '&amp;')
+            .replace(/"/g, '&quot;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;');
+    }
+
+    document.getElementById('add-row-combined').addEventListener('click', () => {
+        masterPlaylist.push({ type: 'yt', id: '' });
+        renderAll();
+        // Scroll to bottom & focus new row
+        setTimeout(() => {
+            const inputs = document.querySelectorAll('.id-input');
+            if (inputs.length) inputs[inputs.length - 1].focus();
+        }, 50);
+    });
+
+    // --- Download: bake current masterPlaylist into a fresh copy of this file ---
+    document.getElementById('download-btn').addEventListener('click', () => {
+        const playlistJson = JSON.stringify(masterPlaylist, null, 8)
+            .split('\n')
+            .map((line, i) => i === 0 ? line : '    ' + line)
+            .join('\n');
+
+        const updatedHtml = document.documentElement.outerHTML.replace(
+            /window\.__EUBOEAN_PLAYLIST__\s*=\s*\[[\s\S]*?\];/,
+            `window.__EUBOEAN_PLAYLIST__ = ${playlistJson};`
+        );
+
+        const blob = new Blob(['<!DOCTYPE html>\n' + updatedHtml], { type: 'text/html' });
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = 'admin.html';
+        a.click();
+        URL.revokeObjectURL(a.href);
+
+        const status = document.getElementById('save-status');
+        status.classList.add('show');
+        setTimeout(() => status.classList.remove('show'), 3000);
+    });
+
+    renderAll();
+</script>
+</body></html>
